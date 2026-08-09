@@ -48,6 +48,8 @@ alma.local_field_990 all "NEL*2607"
 
 The widget loads matching MARC records in pages of 50 and renders up to 1000 records.
 
+For records with an ISBN in MARC field `020$a`, the widget loads a cover from Open Library. ISBN qualifiers such as `(hbk.)` are ignored, and the cover area is hidden when Open Library has no image.
+
 The **Bibliothek** filter offers all ABN libraries or one individual library. The **Zeitraum** filter includes the current month plus up to 11 preceding months. In the all-library view, the widget uses the SRU wildcard query `alma.local_field_990 all "NEL*YYMM"` for each selected month. An individual library uses an exact code such as `alma.local_field_990=NELAKBYYMM`.
 
 `searchScope`, `tab`, and `recentMonthCount` define the initial selection. Library options are read from the embedded `library-data` JSON in `index.html`, so no separate JSON request is required when opening the page directly.

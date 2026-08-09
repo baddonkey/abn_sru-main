@@ -141,6 +141,16 @@
     return cleaned.replace(/[\[\]]/g, "").replace(/©/g, "").trim();
   }
 
+  function normalizeIsbn(value) {
+    const match = (value || "").toUpperCase().match(/(?:97[89][\d\s-]{10,16}|[\dX][\dX\s-]{8,15})/);
+    if (!match) {
+      return "";
+    }
+
+    const isbn = match[0].replace(/[^\dX]/g, "");
+    return isbn.length === 10 || isbn.length === 13 ? isbn : "";
+  }
+
   function parseMarcRecord(recordNode) {
     const title = cleanCatalogText(readMarcJoinedSubfields(recordNode, "245", ["a", "b"])) || "Ohne Titel";
     const creator =
@@ -167,6 +177,9 @@
       readMarcJoinedSubfields(recordNode, "505", ["a"]) ||
       readMarcJoinedSubfields(recordNode, "500", ["a"]);
     const libraries = parseLibraries(recordNode);
+    const isbn = readMarcSubfields(recordNode, "020", "a")
+      .map(normalizeIsbn)
+      .find(Boolean) || "";
 
     return {
       title,
@@ -174,7 +187,8 @@
       publicationLine,
       date,
       summary,
-      libraries
+      libraries,
+      isbn
     };
   }
 
@@ -215,6 +229,38 @@
     }
 
     return `https://abn.swisscovery.ch/discovery/fulldisplay?${params.toString()}`;
+  }
+
+  function createBookCover(book) {
+    if (!book.isbn) {
+      return null;
+    }
+
+    const cover = document.createElement("div");
+    cover.className = "book-cover";
+    cover.hidden = true;
+
+    const image = document.createElement("img");
+    image.className = "book-cover-image";
+    image.alt = `Cover von ${book.title}`;
+    image.decoding = "async";
+
+    image.addEventListener("load", () => {
+      if (image.naturalWidth <= 1 || image.naturalHeight <= 1) {
+        cover.remove();
+        return;
+      }
+
+      cover.hidden = false;
+      cover.parentElement?.classList.remove("book-card-body-no-cover");
+    });
+    image.addEventListener("error", () => {
+      cover.remove();
+    });
+
+    image.src = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(book.isbn)}-M.jpg`;
+    cover.appendChild(image);
+    return cover;
   }
 
   function createSummaryElements(summaryText) {
@@ -494,6 +540,13 @@
       content.appendChild(toggleButton);
     }
 
+    const cover = createBookCover(book);
+    if (cover) {
+      cardBody.classList.add("book-card-body-no-cover");
+      cardBody.appendChild(cover);
+    } else {
+      cardBody.classList.add("book-card-body-no-cover");
+    }
     cardBody.appendChild(content);
     li.appendChild(cardBody);
 
