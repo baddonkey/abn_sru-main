@@ -39,19 +39,17 @@
     return libraries.find((library) => library.scope === librarySelect.value) || null;
   }
 
-  function createActiveConfig() {
+  function buildRequestConfig() {
     const selectedLibrary = getSelectedLibrary();
-    const selectedLibraries = selectedLibrary ? [selectedLibrary] : libraries;
+    const filterCode = selectedLibrary
+      ? selectedLibrary.filterShort || selectedLibrary.short
+      : "*";
 
     return {
       ...window.SRU_CONFIG,
       searchScope: selectedLibrary ? selectedLibrary.scope : "",
       tab: selectedLibrary ? selectedLibrary.scope : "",
-      localField990Prefix: "",
-      localField990Prefixes: selectedLibrary ? selectedLibraries.map(
-        (library) => `NEL${library["field-filter-short"] || library["library-short"]}`
-      ) : [],
-      localField990WildcardPrefix: selectedLibrary ? "" : "NEL*",
+      accessionPrefix: `NEL${filterCode}`,
       recentMonthCount: Number(monthSlider.value) || 1
     };
   }
@@ -59,7 +57,7 @@
   function createFilterLabel() {
     const selectedLibrary = getSelectedLibrary();
     const libraryName = selectedLibrary
-      ? selectedLibrary["library-name"]
+      ? selectedLibrary.name
       : "Alle Bibliotheken (ABN)";
     const monthCount = Number(monthSlider.value) || 1;
     const monthLabel = monthCount === 1 ? "aktueller Monat" : `letzte ${monthCount} Monate`;
@@ -148,7 +146,7 @@
   }
 
   async function load() {
-    activeConfig = createActiveConfig();
+    activeConfig = buildRequestConfig();
     activeFilterLabel = createFilterLabel();
     statusNode.textContent = `Lade Neueingänge (${activeFilterLabel})...`;
     setControlsDisabled(true);
@@ -185,11 +183,11 @@
     }
   }
 
-  function loadLibraries() {
+  function initializeFilters() {
     const dataNode = document.getElementById("library-data");
     const data = JSON.parse(dataNode?.textContent || "[]");
     libraries = data.filter(
-      (library) => library.scope && library["library-short"] && library["library-name"]
+      (library) => library.scope && library.short && library.name
     );
 
     if (libraries.length === 0) {
@@ -199,7 +197,7 @@
     libraries.forEach((library) => {
       const option = document.createElement("option");
       option.value = library.scope;
-      option.textContent = library["library-name"];
+      option.textContent = library.name;
       librarySelect.appendChild(option);
     });
 
@@ -222,7 +220,7 @@
   monthSlider.addEventListener("change", load);
 
   try {
-    loadLibraries();
+    initializeFilters();
     load();
   } catch (error) {
     statusNode.textContent = error.message;

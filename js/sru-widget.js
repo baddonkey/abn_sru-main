@@ -19,29 +19,15 @@
   }
 
   function resolveQuery(config) {
-    if (config.localField990WildcardPrefix) {
-      const codes = buildRecentMonthCodes(
-        [config.localField990WildcardPrefix],
-        config.recentMonthCount || 1
-      );
+    if (config.accessionPrefix) {
+      const codes = buildRecentMonthCodes([config.accessionPrefix], config.recentMonthCount || 1);
+      const wildcard = config.accessionPrefix.includes("*");
 
       return codes
-        .map((code) => `alma.local_field_990 all "${code}"`)
-        .join(" or ");
-    }
-
-    const prefixes = Array.isArray(config.localField990Prefixes)
-      ? config.localField990Prefixes.filter(Boolean)
-      : [config.localField990Prefix].filter(Boolean);
-
-    if (prefixes.length > 0) {
-      const codes = buildRecentMonthCodes(
-        prefixes,
-        config.recentMonthCount || 2
-      );
-
-      return codes
-        .map((code) => `alma.local_field_990=${code}`)
+        .map((code) => wildcard
+          ? `alma.local_field_990 all "${code}"`
+          : `alma.local_field_990=${code}`
+        )
         .join(" or ");
     }
 
@@ -53,14 +39,6 @@
       (candidate) => candidate.localName === localName
     );
     return node ? node.textContent.trim() : "";
-  }
-
-  function readMarcControlField(recordNode, tag) {
-    const field = Array.from(recordNode.getElementsByTagName("*")).find(
-      (candidate) => candidate.localName === "controlfield" && candidate.getAttribute("tag") === tag
-    );
-
-    return field ? field.textContent.trim() : "";
   }
 
   function readMarcSubfields(recordNode, tag, code) {
@@ -78,45 +56,25 @@
     });
   }
 
-  function readMarcSubfieldValue(fieldNode, code) {
-    const subfield = Array.from(fieldNode.children).find(
-      (candidate) => candidate.localName === "subfield" && candidate.getAttribute("code") === code
-    );
-
-    return subfield ? subfield.textContent.trim() : "";
-  }
-
-  function parseHoldings(recordNode) {
+  function parseLibraries(recordNode) {
     const avaFields = Array.from(recordNode.getElementsByTagName("*")).filter(
       (candidate) => candidate.localName === "datafield" && candidate.getAttribute("tag") === "AVA"
     );
 
-    const seen = new Set();
-
-    return avaFields
+    return Array.from(new Set(avaFields
       .map((fieldNode) => {
-        const library = cleanCatalogText(
-          readMarcSubfieldValue(fieldNode, "q") || readMarcSubfieldValue(fieldNode, "b")
+        const subfields = Array.from(fieldNode.children);
+        const library = subfields.find(
+          (subfield) => subfield.localName === "subfield" && subfield.getAttribute("code") === "q"
         );
-        const location = cleanCatalogText(
-          readMarcSubfieldValue(fieldNode, "c") || readMarcSubfieldValue(fieldNode, "d")
+        const fallback = subfields.find(
+          (subfield) => subfield.localName === "subfield" && subfield.getAttribute("code") === "b"
         );
-        const locationLabel = [library, location].filter(Boolean).join(" - ") || "Unbekannt";
 
-        return {
-          library,
-          location,
-          locationLabel
-        };
+        return library?.textContent || fallback?.textContent || "";
       })
-      .filter((holding) => {
-        if (seen.has(holding.locationLabel)) {
-          return false;
-        }
-
-        seen.add(holding.locationLabel);
-        return true;
-      });
+      .map(cleanCatalogText)
+      .filter(Boolean)));
   }
 
   function readMarcJoinedSubfields(recordNode, tag, codes) {
@@ -142,11 +100,6 @@
     });
 
     return values.join(" ").trim();
-  }
-
-  function normalizeIsbn(value) {
-    const normalized = value.replace(/[^0-9Xx]/g, "").toUpperCase();
-    return normalized.length >= 10 ? normalized : "";
   }
 
   function cleanCatalogText(value) {
@@ -209,30 +162,19 @@
       readMarcJoinedSubfields(recordNode, "264", ["c"]) ||
       readMarcJoinedSubfields(recordNode, "260", ["c"]);
     const date = normalizeDisplayDate(dateSource) || "Ohne Erscheinungsjahr";
-    const identifier =
-      readMarcSubfields(recordNode, "856", "u")[0] ||
-      readMarcSubfields(recordNode, "024", "a")[0] ||
-      "";
     const summary =
       readMarcJoinedSubfields(recordNode, "520", ["a"]) ||
       readMarcJoinedSubfields(recordNode, "505", ["a"]) ||
       readMarcJoinedSubfields(recordNode, "500", ["a"]);
-    const isbn = normalizeIsbn(readMarcSubfields(recordNode, "020", "a")[0] || "");
-    const accessionCode = readMarcSubfields(recordNode, "990", "a")[0] || "";
-    const modifiedAt = readMarcControlField(recordNode, "005");
-    const holdings = parseHoldings(recordNode);
+    const libraries = parseLibraries(recordNode);
 
     return {
       title,
       creator,
       publicationLine,
       date,
-      identifier,
       summary,
-      isbn,
-      holdings,
-      accessionCode,
-      modifiedAt
+      libraries
     };
   }
 
@@ -240,7 +182,6 @@
     const title = cleanCatalogText(readFirstByLocalName(recordNode, "title")) || "Ohne Titel";
     const creator = cleanCreatorText(readFirstByLocalName(recordNode, "creator")) || "Unbekannt";
     const date = normalizeDisplayDate(readFirstByLocalName(recordNode, "date")) || "Ohne Erscheinungsjahr";
-    const identifier = readFirstByLocalName(recordNode, "identifier");
     const summary = readFirstByLocalName(recordNode, "description");
 
     return {
@@ -248,43 +189,8 @@
       creator,
       publicationLine: "",
       date,
-      identifier,
       summary,
-      isbn: "",
-      holdings: [],
-      accessionCode: "",
-      modifiedAt: ""
-    };
-  }
-
-  function compareBooksDescending(left, right) {
-    const leftMonth = left.accessionCode.match(/(\d{2})(0[1-9]|1[0-2])$/)?.[0] || "";
-    const rightMonth = right.accessionCode.match(/(\d{2})(0[1-9]|1[0-2])$/)?.[0] || "";
-    const accessionCompare = rightMonth.localeCompare(leftMonth);
-    if (accessionCompare !== 0) {
-      return accessionCompare;
-    }
-
-    const modifiedCompare = right.modifiedAt.localeCompare(left.modifiedAt);
-    if (modifiedCompare !== 0) {
-      return modifiedCompare;
-    }
-
-    return left.title.localeCompare(right.title);
-  }
-
-  function getDebugInfo(config) {
-    return {
-      query: resolveQuery(config),
-      sortMode: config.localField990WildcardPrefix ||
-        config.localField990Prefix ||
-        config.localField990Prefixes?.length
-        ? "Client-Sortierung: 990$a absteigend, 005 absteigend, Titel aufsteigend"
-        : "Server-Reihenfolge",
-      fetchLimit: config.maximumRecords,
-      sruPageSize: config.sruPageSize || config.maximumRecords,
-      displayLimit: config.displayLimit || config.maximumRecords,
-      recordSchema: config.recordSchema
+      libraries: []
     };
   }
 
@@ -309,14 +215,6 @@
     }
 
     return `https://abn.swisscovery.ch/discovery/fulldisplay?${params.toString()}`;
-  }
-
-  function buildThumbnailUrl(book) {
-    if (!book.isbn) {
-      return "";
-    }
-
-    return `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg?default=false`;
   }
 
   function createSummaryElements(summaryText) {
@@ -364,7 +262,7 @@
       version: config.version,
       query: resolveQuery(config),
       recordSchema: config.recordSchema,
-      maximumRecords: String(config.requestMaximumRecords || config.sruPageSize || config.maximumRecords),
+      maximumRecords: String(config.requestMaximumRecords || config.sruPageSize),
       startRecord: String(startRecordOverride || config.startRecord)
     });
 
@@ -482,35 +380,11 @@
     }
   }
 
-  async function fetchLatestBooks(config) {
-    const targetCount = Math.max(config.maximumRecords, config.displayLimit || 0);
-    const allRecords = [];
-    let startRecord = config.startRecord;
-    let nextRecordPosition = startRecord;
-    let numberOfRecords = 0;
-
-    while (startRecord && allRecords.length < targetCount) {
-      const page = await fetchSruPage(config, startRecord);
-      allRecords.push(...page.records);
-      numberOfRecords = page.numberOfRecords;
-      nextRecordPosition = page.nextRecordPosition;
-
-      if (!nextRecordPosition || nextRecordPosition <= startRecord || allRecords.length >= numberOfRecords) {
-        break;
-      }
-
-      startRecord = nextRecordPosition;
-    }
-
-    return allRecords
-      .sort(compareBooksDescending)
-      .slice(0, config.displayLimit || config.maximumRecords);
-  }
-
   function createPagedFetcher(config) {
-    const configuredLimit = config.displayLimit || config.maximumRecords;
-    const totalLimit = configuredLimit > 0 ? configuredLimit : Number.POSITIVE_INFINITY;
-    const pageSize = Math.max(1, config.sruPageSize || config.maximumRecords || 50);
+    const totalLimit = config.displayLimit > 0
+      ? config.displayLimit
+      : Number.POSITIVE_INFINITY;
+    const pageSize = Math.max(1, config.sruPageSize || 50);
 
     let nextStartRecord = config.startRecord || 1;
     let loadedCount = 0;
@@ -561,51 +435,7 @@
       };
     }
 
-    function hasMore() {
-      return !exhausted;
-    }
-
-    return {
-      loadNextPage,
-      hasMore
-    };
-  }
-
-  async function fetchLatestBooksProgressively(config, onPage) {
-    const targetCount = Math.max(config.maximumRecords, config.displayLimit || 0);
-    const allRecords = [];
-    let startRecord = config.startRecord;
-    let nextRecordPosition = startRecord;
-    let numberOfRecords = 0;
-    let pageNumber = 0;
-
-    while (startRecord && allRecords.length < targetCount) {
-      const page = await fetchSruPage(config, startRecord);
-      pageNumber += 1;
-      allRecords.push(...page.records);
-      numberOfRecords = page.numberOfRecords;
-      nextRecordPosition = page.nextRecordPosition;
-
-      if (typeof onPage === "function") {
-        onPage({
-          pageRecords: page.records,
-          pageNumber,
-          totalLoaded: allRecords.length,
-          numberOfRecords,
-          nextRecordPosition
-        });
-      }
-
-      if (!nextRecordPosition || nextRecordPosition <= startRecord || allRecords.length >= numberOfRecords) {
-        break;
-      }
-
-      startRecord = nextRecordPosition;
-    }
-
-    return allRecords
-      .sort(compareBooksDescending)
-      .slice(0, config.displayLimit || config.maximumRecords);
+    return { loadNextPage };
   }
 
   function createBookListItem(book, index, config) {
@@ -618,20 +448,6 @@
 
     const content = document.createElement("div");
     content.className = "book-content";
-
-    const thumbnailUrl = config?.showThumbnails ? buildThumbnailUrl(book) : "";
-    if (thumbnailUrl) {
-      const thumbnail = document.createElement("img");
-      thumbnail.className = "book-thumbnail";
-      thumbnail.src = thumbnailUrl;
-      thumbnail.alt = `Cover für ${book.title}`;
-      thumbnail.loading = "lazy";
-      thumbnail.referrerPolicy = "no-referrer";
-      thumbnail.addEventListener("error", () => {
-        thumbnail.remove();
-      });
-      cardBody.appendChild(thumbnail);
-    }
 
     const title = document.createElement("h3");
     title.className = "book-title";
@@ -659,15 +475,8 @@
 
     const availability = document.createElement("p");
     availability.className = "book-availability";
-    const uniqueLibraries = Array.from(
-      new Set(
-        (Array.isArray(book.holdings) ? book.holdings : [])
-          .map((holding) => (holding && holding.library ? cleanCatalogText(holding.library) : ""))
-          .filter(Boolean)
-      )
-    );
-    availability.textContent = uniqueLibraries.length
-      ? `Verfügbar in: ${uniqueLibraries.join(", ")}`
+    availability.textContent = book.libraries.length
+      ? `Verfügbar in: ${book.libraries.join(", ")}`
       : "Verfügbar in: Keine Bibliotheksangabe";
 
     const { summary, toggleButton } = createSummaryElements(book.summary);
@@ -697,23 +506,8 @@
     });
   }
 
-  function renderBooks(container, books, config) {
-    container.innerHTML = "";
-
-    if (!books.length) {
-      container.innerHTML = '<li class="book-item">Keine neuen Zugänge gefunden.</li>';
-      return;
-    }
-
-    appendBooks(container, books, config, 0);
-  }
-
   window.LibrarySruWidget = {
-    fetchLatestBooks,
     createPagedFetcher,
-    fetchLatestBooksProgressively,
-    appendBooks,
-    renderBooks,
-    getDebugInfo
+    appendBooks
   };
 })();

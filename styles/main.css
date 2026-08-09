@@ -193,15 +193,6 @@ h1 {
   gap: 0.18rem;
 }
 
-.book-thumbnail {
-  width: 72px;
-  height: 108px;
-  object-fit: cover;
-  border-radius: 0.2rem;
-  border: 1px solid var(--edge);
-  background: #eef1f4;
-}
-
 .book-title {
   margin: 0;
   font-size: 1.02rem;
@@ -287,10 +278,6 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .book-thumbnail {
-    width: 60px;
-    height: 90px;
-  }
 }
 
 @keyframes rise {
