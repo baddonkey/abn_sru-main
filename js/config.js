@@ -10,6 +10,6 @@ window.SRU_CONFIG = {
   sruPageSize: 50,
   displayLimit: 1000,
   startRecord: 1,
-  sortKeys: "",
+  sortBy: "",
   timeoutMs: 12000
 };

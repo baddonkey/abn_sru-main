@@ -17,6 +17,7 @@
   let sentinelNode = null;
   let isLoadingNextPage = false;
   let totalLoaded = 0;
+  let activeMonthCode = "";
 
   function setControlsDisabled(disabled) {
     librarySelect.disabled = disabled;
@@ -97,6 +98,21 @@
       `Neueingänge (${activeFilterLabel}): Seite ${pageNumber}, ${loaded}${totalHint} geladen.`;
   }
 
+  function appendMonthHeading(monthCode, monthLabel) {
+    if (!monthCode || monthCode === activeMonthCode) {
+      return;
+    }
+
+    const item = document.createElement("li");
+    item.className = "book-month-heading";
+
+    const heading = document.createElement("h2");
+    heading.textContent = monthLabel;
+    item.appendChild(heading);
+    listNode.appendChild(item);
+    activeMonthCode = monthCode;
+  }
+
   async function loadNextPage() {
     if (!pager || isLoadingNextPage) {
       return;
@@ -116,6 +132,7 @@
         return;
       }
 
+      appendMonthHeading(page.monthCode, page.monthLabel);
       window.LibrarySruWidget.appendBooks(listNode, page.records, activeConfig, totalLoaded);
       totalLoaded = page.totalLoaded;
       setLoadingStatus(page.pageNumber, page.totalLoaded, page.totalAvailable);
@@ -154,6 +171,7 @@
     removeSentinel();
     pager = null;
     totalLoaded = 0;
+    activeMonthCode = "";
     listNode.innerHTML = "";
 
     try {

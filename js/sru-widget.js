@@ -18,12 +18,33 @@
     return codes;
   }
 
+  function buildAccessionQuery(accessionPrefix, code) {
+    return accessionPrefix.includes("*")
+      ? `alma.local_field_990 all "${code}"`
+      : `alma.local_field_990=${code}`;
+  }
+
+  function formatMonthLabel(code) {
+    const match = code.match(/(\d{2})(\d{2})$/);
+    if (!match) {
+      return code;
+    }
+
+    const date = new Date(2000 + Number(match[1]), Number(match[2]) - 1, 1);
+    return new Intl.DateTimeFormat("de-CH", {
+      month: "long",
+      year: "numeric"
+    }).format(date);
+  }
+
   function resolveQuery(config) {
+    let query = config.query;
+
     if (config.accessionPrefix) {
       const codes = buildRecentMonthCodes([config.accessionPrefix], config.recentMonthCount || 1);
       const wildcard = config.accessionPrefix.includes("*");
 
-      return codes
+      query = codes
         .map((code) => wildcard
           ? `alma.local_field_990 all "${code}"`
           : `alma.local_field_990=${code}`
@@ -31,7 +52,7 @@
         .join(" or ");
     }
 
-    return config.query;
+    return config.sortBy ? `${query} sortBy ${config.sortBy}` : query;
   }
 
   function readFirstByLocalName(parent, localName) {
@@ -308,7 +329,7 @@
       version: config.version,
       query: resolveQuery(config),
       recordSchema: config.recordSchema,
-      maximumRecords: String(config.requestMaximumRecords || config.sruPageSize),
+      maximumRecords: String(config.requestMaximumRecords ?? config.sruPageSize),
       startRecord: String(startRecordOverride || config.startRecord)
     });
 
@@ -323,10 +344,6 @@
 
     if (config.tab) {
       params.set("tab", config.tab);
-    }
-
-    if (config.sortKeys) {
-      params.set("sortKeys", config.sortKeys);
     }
 
     return params.toString();
@@ -431,12 +448,51 @@
       ? config.displayLimit
       : Number.POSITIVE_INFINITY;
     const pageSize = Math.max(1, config.sruPageSize || 50);
+    const monthCodes = config.accessionPrefix
+      ? buildRecentMonthCodes(
+        [config.accessionPrefix],
+        config.recentMonthCount || 1
+      )
+      : [];
+    const aggregateQuery = monthCodes.length > 1 ? resolveQuery(config) : "";
 
     let nextStartRecord = config.startRecord || 1;
+    let monthIndex = 0;
     let loadedCount = 0;
     let pageNumber = 0;
     let totalAvailable = 0;
+    let hasAggregateTotal = false;
     let exhausted = false;
+    const seenRecordIdentifiers = new Set();
+
+    function getRequestConfig(requestMaximumRecords) {
+      if (!monthCodes.length) {
+        return { ...config, requestMaximumRecords };
+      }
+
+      return {
+        ...config,
+        accessionPrefix: "",
+        query: buildAccessionQuery(config.accessionPrefix, monthCodes[monthIndex]),
+        requestMaximumRecords
+      };
+    }
+
+    async function loadAggregateTotal() {
+      if (!aggregateQuery || hasAggregateTotal) {
+        return;
+      }
+
+      const countPage = await fetchSruPage({
+        ...config,
+        accessionPrefix: "",
+        query: aggregateQuery,
+        requestMaximumRecords: 0
+      }, config.startRecord || 1);
+
+      totalAvailable = countPage.numberOfRecords;
+      hasAggregateTotal = true;
+    }
 
     async function loadNextPage() {
       if (exhausted || !nextStartRecord) {
@@ -450,29 +506,60 @@
         };
       }
 
+      await loadAggregateTotal();
+
       const remaining = Number.isFinite(totalLimit)
         ? Math.max(totalLimit - loadedCount, 0)
         : pageSize;
       const requestMaximumRecords = Math.max(1, Math.min(pageSize, remaining || pageSize));
-      const page = await fetchSruPage({ ...config, requestMaximumRecords }, nextStartRecord);
+      const requestedStartRecord = nextStartRecord;
+      const currentMonthCode = monthCodes[monthIndex] || "";
+      const page = await fetchSruPage(
+        getRequestConfig(requestMaximumRecords),
+        requestedStartRecord
+      );
       pageNumber += 1;
 
-      const records = page.records || [];
+      const records = (page.records || []).filter((record) => {
+        if (!record.recordIdentifier || !seenRecordIdentifiers.has(record.recordIdentifier)) {
+          if (record.recordIdentifier) {
+            seenRecordIdentifiers.add(record.recordIdentifier);
+          }
+          return true;
+        }
+
+        return false;
+      });
       loadedCount += records.length;
-      totalAvailable = page.numberOfRecords;
+      if (!aggregateQuery) {
+        totalAvailable = page.numberOfRecords;
+      }
 
       const hasServerNext = Boolean(
-        page.nextRecordPosition && page.nextRecordPosition > nextStartRecord
+        page.nextRecordPosition && page.nextRecordPosition > requestedStartRecord
       );
       const reachedClientLimit = Number.isFinite(totalLimit) && loadedCount >= totalLimit;
-      const reachedServerTotal = totalAvailable > 0 && loadedCount >= totalAvailable;
+      const hasLaterMonth = monthCodes.length > 0 && monthIndex < monthCodes.length - 1;
+      const hasMore = !reachedClientLimit && (hasServerNext || hasLaterMonth);
 
-      const hasMore = hasServerNext && !reachedClientLimit && !reachedServerTotal;
-      nextStartRecord = hasMore ? page.nextRecordPosition : 0;
+      if (hasServerNext && !reachedClientLimit) {
+        nextStartRecord = page.nextRecordPosition;
+      } else if (hasLaterMonth && !reachedClientLimit) {
+        monthIndex += 1;
+        nextStartRecord = config.startRecord || 1;
+      } else {
+        nextStartRecord = 0;
+      }
       exhausted = !hasMore;
+
+      if (!records.length && hasMore) {
+        return loadNextPage();
+      }
 
       return {
         records,
+        monthCode: currentMonthCode,
+        monthLabel: currentMonthCode ? formatMonthLabel(currentMonthCode) : "",
         pageNumber,
         totalLoaded: loadedCount,
         totalAvailable,

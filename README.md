@@ -22,7 +22,7 @@ Edit `js/config.js`:
 - `endpoint`: your SRU base URL
 - `query`: your CQL query for new books when no dynamic local-field filter is active
 - `recordSchema`: usually `dc` or the schema your server supports
-- `sortKeys`: choose a date-based field available on your SRU server
+- `sortBy`: optional Alma CQL sort expression using an index marked sortable by the endpoint
 - `searchScope`: optional discovery scope (for ABN for example `ABN_AKB`, `ABN_HFGS`, `ABN_AKS`)
 - `tab`: optional discovery tab value, usually same as `searchScope`
 - `vid`: optional discovery view ID
@@ -46,7 +46,7 @@ With the default configuration, the widget queries the current month using the l
 alma.local_field_990 all "NEL*2607"
 ```
 
-The widget loads matching MARC records in pages of 50 and renders up to 1000 records.
+The widget loads matching MARC records in pages of 50 and renders up to 1000 records. Results are grouped by accession month from newest to oldest. Infinite scrolling exhausts all pages for one month before loading the next month, and each month starts with a visible heading.
 
 For records with an ISBN in MARC field `020$a`, the widget loads a cover from Open Library. ISBN qualifiers such as `(hbk.)` are ignored, and the cover area is hidden when Open Library has no image.
 
@@ -68,4 +68,4 @@ Then open http://localhost:5500 in your browser.
 ## Notes
 - Some SRU servers block browser-origin requests without CORS headers. If requests fail, verify CORS support on the SRU endpoint.
 - XML fields differ across catalogs. If needed, adjust parsing in `js/sru-widget.js`.
-- ALMA SRU implementations may reject some `sortKeys` combinations; this project keeps sorting optional and relies on the endpoint's default order unless `sortKeys` is explicitly set.
+- The ABN endpoint supports server-side sorting by `alma.main_pub_date`, `alma.creator`, and `alma.title`. Local field 990 is searchable but not sortable, so the timeline filter cannot be ordered by its 990 accession code on the server.
