@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neu im Bestand</title>
+    <link
+      rel="stylesheet"
+      href="https://abn.swisscovery.ch/discovery/fonts/source-sans-pro-2.020R-ro-1.075R-it/source-sans-pro.css?version=d4ab211e8f&family=Source+Sans+Pro:400,300,600,700,400italic"
+    />
+    <link rel="stylesheet" href="./styles/main.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <h1>Neueingänge</h1>
+      </section>
+
+      <section class="widget-shell" aria-label="Neueste Zugänge">
+        <header class="widget-header">
+          <div class="widget-actions">
+            <button id="refresh-button" class="ghost-button" type="button">
+              Aktualisieren
+            </button>
+          </div>
+        </header>
+
+        <div id="status" class="status" role="status" aria-live="polite">
+          Lade aktuelle Katalogdaten...
+        </div>
+        <ul id="book-list" class="book-list" aria-label="Neueste Zugänge"></ul>
+      </section>
+    </main>
+
+    <script src="./js/config.js"></script>
+    <script src="./js/sru-widget.js"></script>
+    <script src="./js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run local static server",
+      "type": "shell",
+      "command": "python3",
+      "args": ["-m", "http.server", "5500"],
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
