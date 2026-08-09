@@ -34,6 +34,12 @@
     return config.query;
   }
 
+  function buildAccessionQuery(accessionPrefix, code) {
+    return accessionPrefix.includes("*")
+      ? `alma.local_field_990 all "${code}"`
+      : `alma.local_field_990=${code}`;
+  }
+
   function readFirstByLocalName(parent, localName) {
     const node = Array.from(parent.getElementsByTagName("*")).find(
       (candidate) => candidate.localName === localName
@@ -431,12 +437,33 @@
       ? config.displayLimit
       : Number.POSITIVE_INFINITY;
     const pageSize = Math.max(1, config.sruPageSize || 50);
+    const monthQueries = config.accessionPrefix
+      ? buildRecentMonthCodes(
+        [config.accessionPrefix],
+        config.recentMonthCount || 1
+      ).map((code) => buildAccessionQuery(config.accessionPrefix, code))
+      : [];
 
     let nextStartRecord = config.startRecord || 1;
+    let monthIndex = 0;
     let loadedCount = 0;
     let pageNumber = 0;
     let totalAvailable = 0;
     let exhausted = false;
+    const seenRecordIdentifiers = new Set();
+
+    function getRequestConfig(requestMaximumRecords) {
+      if (!monthQueries.length) {
+        return { ...config, requestMaximumRecords };
+      }
+
+      return {
+        ...config,
+        accessionPrefix: "",
+        query: monthQueries[monthIndex],
+        requestMaximumRecords
+      };
+    }
 
     async function loadNextPage() {
       if (exhausted || !nextStartRecord) {
@@ -454,22 +481,49 @@
         ? Math.max(totalLimit - loadedCount, 0)
         : pageSize;
       const requestMaximumRecords = Math.max(1, Math.min(pageSize, remaining || pageSize));
-      const page = await fetchSruPage({ ...config, requestMaximumRecords }, nextStartRecord);
+      const requestedStartRecord = nextStartRecord;
+      const page = await fetchSruPage(
+        getRequestConfig(requestMaximumRecords),
+        requestedStartRecord
+      );
       pageNumber += 1;
 
-      const records = page.records || [];
+      if (requestedStartRecord === (config.startRecord || 1)) {
+        totalAvailable += page.numberOfRecords;
+      }
+
+      const records = (page.records || []).filter((record) => {
+        if (!record.recordIdentifier || !seenRecordIdentifiers.has(record.recordIdentifier)) {
+          if (record.recordIdentifier) {
+            seenRecordIdentifiers.add(record.recordIdentifier);
+          }
+          return true;
+        }
+
+        return false;
+      });
       loadedCount += records.length;
-      totalAvailable = page.numberOfRecords;
 
       const hasServerNext = Boolean(
-        page.nextRecordPosition && page.nextRecordPosition > nextStartRecord
+        page.nextRecordPosition && page.nextRecordPosition > requestedStartRecord
       );
       const reachedClientLimit = Number.isFinite(totalLimit) && loadedCount >= totalLimit;
-      const reachedServerTotal = totalAvailable > 0 && loadedCount >= totalAvailable;
+      const hasLaterMonth = monthQueries.length > 0 && monthIndex < monthQueries.length - 1;
+      const hasMore = !reachedClientLimit && (hasServerNext || hasLaterMonth);
 
-      const hasMore = hasServerNext && !reachedClientLimit && !reachedServerTotal;
-      nextStartRecord = hasMore ? page.nextRecordPosition : 0;
+      if (hasServerNext && !reachedClientLimit) {
+        nextStartRecord = page.nextRecordPosition;
+      } else if (hasLaterMonth && !reachedClientLimit) {
+        monthIndex += 1;
+        nextStartRecord = config.startRecord || 1;
+      } else {
+        nextStartRecord = 0;
+      }
       exhausted = !hasMore;
+
+      if (!records.length && hasMore) {
+        return loadNextPage();
+      }
 
       return {
         records,
