@@ -13,6 +13,7 @@ This project is a lightweight widget that displays new arrivals from a library c
 - `js/config.js`: SRU endpoint and query settings
 - `js/sru-widget.js`: SRU fetch + XML parsing + rendering helpers
 - `js/main.js`: app bootstrap and refresh handling
+- Embedded `library-data` JSON in `index.html`: ABN scopes, short codes, optional field-filter overrides, and display names
 - `.github/copilot-instructions.md`: repository-specific Auto mode guidance for Copilot
 - `AGENTS.md`: coding-agent workflow and contribution guardrails
 
@@ -26,7 +27,7 @@ Edit `js/config.js`:
 - `tab`: optional discovery tab value, usually same as `searchScope`
 - `vid`: optional discovery view ID
 - `localField990Prefix`: local accession prefix, for example `NELAKB`
-- `recentMonthCount`: how many months to include, default `2`
+- `recentMonthCount`: how many months to include, default `1` (current month)
 - `maximumRecords`: how many SRU records to fetch before local sorting
 - `displayLimit`: how many sorted records to render in the widget
 - `showThumbnails`: whether ISBN-based cover thumbnails should be shown
@@ -38,21 +39,26 @@ Default values are preconfigured for swisscovery ABN:
 - `tab`: `ABN_AKB`
 - `vid`: `41SLSP_ABN:ABN`
 - `localField990Prefix`: `NELAKB`
-- `recentMonthCount`: `2`
+- `recentMonthCount`: `1`
 - `maximumRecords`: `1000`
 - `displayLimit`: `1000`
 - `showThumbnails`: `false`
 
-With this configuration, the widget automatically queries the current and previous month using the local field 990 code pattern. In July 2026, that becomes:
+With the default configuration, the widget queries the current month using the local field 990 code pattern. The timeline slider can extend the period to the preceding 11 months. In July 2026, the default query becomes:
 
 ```text
-alma.local_field_990=NELAKB2607 or alma.local_field_990=NELAKB2606
+alma.local_field_990=NELAKB2607
 ```
 
 The widget fetches up to 1000 matching MARC records, sorts them client-side by local field 990 descending, uses MARC field 005 as a tie-breaker, and then renders all fetched records.
 
-For another ABN scope, replace both `searchScope` and `tab` with either `ABN_HFGS` or `ABN_AKS`.
-If another library uses a different local 990 prefix, replace `localField990Prefix` accordingly.
+Thumbnails are disabled by default because Open Library returns HTTP 404 for many catalog ISBNs. Enabling them can therefore add expected failed image requests to the browser console.
+
+The **Bibliothek** filter offers all ABN libraries or one individual library. The **Zeitraum** filter includes the current month plus up to 11 preceding months. In the all-library view, the widget uses the SRU wildcard query `alma.local_field_990 all "NEL*YYMM"` for each selected month. An individual library uses an exact code such as `alma.local_field_990=NELAKBYYMM`.
+
+`searchScope`, `tab`, `localField990Prefix`, and `recentMonthCount` define the initial selection. Library options are read from the embedded `library-data` JSON in `index.html`, so no separate JSON request is required when opening the page directly.
+
+Each library uses `library-short` for its normal abbreviation. If the code in MARC field `990$a` differs, set `field-filter-short`; for example, `ABN_KSZ` keeps `library-short: "KSZ"` but uses `field-filter-short: "BZZ"` to query `NELBZZYYMM`. Without this optional property, the filter uses `library-short`.
 
 ## Run Locally
 From the project root:

@@ -17,7 +17,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--paper);
-  font-family: "Source Sans Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: Candara, "Segoe UI", sans-serif;
   min-height: 100vh;
 }
 
@@ -51,10 +51,81 @@ h1 {
 
 .widget-header {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.7rem;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.filter-control {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.filter-control select {
+  min-width: min(19rem, 78vw);
+  min-height: 2.35rem;
+  padding: 0.4rem 2rem 0.4rem 0.55rem;
+  border: 1px solid var(--edge);
+  border-radius: 0.25rem;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.month-filter-control {
+  min-width: min(19rem, 78vw);
+}
+
+.filter-control-heading,
+.timeline-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.filter-control-heading output {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.month-filter-control input[type="range"] {
+  width: 100%;
+  height: 1.4rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.timeline-labels {
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+  font-weight: 400;
+}
+
+.filter-control select:focus-visible,
+.month-filter-control input[type="range"]:focus-visible,
+.ghost-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.filter-control select:disabled,
+.month-filter-control input[type="range"]:disabled,
+.ghost-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .widget-actions {
@@ -203,6 +274,13 @@ h1 {
 
   .widget-actions {
     flex-wrap: wrap;
+  }
+
+  .filter-bar,
+  .filter-control,
+  .filter-control select,
+  .month-filter-control {
+    width: 100%;
   }
 
   .book-card-body {

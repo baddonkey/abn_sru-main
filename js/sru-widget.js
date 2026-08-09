@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  function buildRecentMonthCodes(prefix, monthCount) {
+  function buildRecentMonthCodes(prefixes, monthCount) {
     const codes = [];
     const today = new Date();
     const totalMonths = Math.max(monthCount || 0, 0);
@@ -10,16 +10,33 @@
       const date = new Date(today.getFullYear(), today.getMonth() - offset, 1);
       const year = String(date.getFullYear()).slice(-2);
       const month = String(date.getMonth() + 1).padStart(2, "0");
-      codes.push(`${prefix}${year}${month}`);
+      prefixes.forEach((prefix) => {
+        codes.push(`${prefix}${year}${month}`);
+      });
     }
 
     return codes;
   }
 
   function resolveQuery(config) {
-    if (config.localField990Prefix) {
+    if (config.localField990WildcardPrefix) {
       const codes = buildRecentMonthCodes(
-        config.localField990Prefix,
+        [config.localField990WildcardPrefix],
+        config.recentMonthCount || 1
+      );
+
+      return codes
+        .map((code) => `alma.local_field_990 all "${code}"`)
+        .join(" or ");
+    }
+
+    const prefixes = Array.isArray(config.localField990Prefixes)
+      ? config.localField990Prefixes.filter(Boolean)
+      : [config.localField990Prefix].filter(Boolean);
+
+    if (prefixes.length > 0) {
+      const codes = buildRecentMonthCodes(
+        prefixes,
         config.recentMonthCount || 2
       );
 
@@ -241,7 +258,9 @@
   }
 
   function compareBooksDescending(left, right) {
-    const accessionCompare = right.accessionCode.localeCompare(left.accessionCode);
+    const leftMonth = left.accessionCode.match(/(\d{2})(0[1-9]|1[0-2])$/)?.[0] || "";
+    const rightMonth = right.accessionCode.match(/(\d{2})(0[1-9]|1[0-2])$/)?.[0] || "";
+    const accessionCompare = rightMonth.localeCompare(leftMonth);
     if (accessionCompare !== 0) {
       return accessionCompare;
     }
@@ -257,7 +276,9 @@
   function getDebugInfo(config) {
     return {
       query: resolveQuery(config),
-      sortMode: config.localField990Prefix
+      sortMode: config.localField990WildcardPrefix ||
+        config.localField990Prefix ||
+        config.localField990Prefixes?.length
         ? "Client-Sortierung: 990$a absteigend, 005 absteigend, Titel aufsteigend"
         : "Server-Reihenfolge",
       fetchLimit: config.maximumRecords,
