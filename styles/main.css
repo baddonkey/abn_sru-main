@@ -295,12 +295,18 @@ h1 {
 
 @media (max-width: 640px) {
   .page {
+    width: calc(100% - 1rem);
     margin: 0.8rem auto 1rem;
+  }
+
+  .widget-shell {
+    padding: 0.75rem;
   }
 
   .widget-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 0.75rem;
   }
 
   .widget-actions {
@@ -318,10 +324,21 @@ h1 {
     grid-template-columns: 4.5rem minmax(0, 1fr);
   }
 
+  .book-card-body:not(:has(.book-cover:not([hidden]))) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .book-card-body:not(:has(.book-cover:not([hidden]))) > .book-content {
+    grid-column: 1 / -1;
+  }
+
   .book-cover {
     width: 4.5rem;
   }
 
+  .book-item {
+    padding: 0.75rem;
+  }
 }
 
 @keyframes rise {
